@@ -1,37 +1,88 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Zoomable Canvas</title>
+    <title>Figma-like Canvas</title>
     <style>
-        body {
+        * {
             margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
             overflow: hidden;
-            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+
+        #topbar {
+            height: 50px;
+            background: #f5f5f5;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .shape-btn {
+            padding: 8px 15px;
+            margin-right: 10px;
+            cursor: pointer;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        #sidebar {
+            width: 250px;
+            height: calc(100vh - 50px);
+            background: white;
+            border-right: 1px solid #ddd;
+            padding: 20px;
+            overflow-y: auto;
         }
 
         #viewport {
-            width: 100%;
-            height: 100vh;
+            position: absolute;
+            left: 250px;
+            top: 50px;
+            right: 0;
+            bottom: 0;
             overflow: hidden;
-            background-color: #fff;
-            cursor: grab;
+            background: white;
         }
 
         #canvas {
             background-image: radial-gradient(circle at 1px 1px, #e0e0e0 1px, transparent 0);
             background-size: 20px 20px;
-            background-position: 0 0;
-            width: 100%;
-            height: 100%;
+            position: relative;
             transform-origin: 0 0;
         }
 
-        #canvas.dragging {
-            cursor: grabbing;
+        .shape {
+            position: absolute;
+            border: 2px solid rgba(0, 0, 0, 0.3);
+        }
+
+        .component-item {
+            padding: 8px;
+            margin: 5px 0;
+            background: #f8f8f8;
+            border-radius: 4px;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
+    <div id="topbar">
+        <button class="shape-btn" data-shape="rect">Rectangle</button>
+        <button class="shape-btn" data-shape="circle">Circle</button>
+    </div>
+
+    <div id="sidebar">
+        <h3>Components</h3>
+        <div id="components-list"></div>
+    </div>
+
     <div id="viewport">
         <div id="canvas"></div>
     </div>
@@ -40,52 +91,127 @@
         const canvas = document.getElementById('canvas');
         const viewport = document.getElementById('viewport');
         let scale = 1;
+        let translateX = 0;
+        let translateY = 0;
         let isDragging = false;
-        let startX, startY, translateX = 0, translateY = 0;
+        let isCreatingShape = false;
+        let currentShape = null;
+        let selectedShape = null;
+        const components = [];
 
-        // Handle mouse wheel zoom
+        // Zoom functionality
         viewport.addEventListener('wheel', (e) => {
             e.preventDefault();
             const delta = e.deltaY > 0 ? 0.9 : 1.1;
             const rect = viewport.getBoundingClientRect();
-            
-            // Get mouse position relative to viewport
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
-            
-            // Calculate new scale and translation
+
             const newScale = scale * delta;
             if (newScale < 0.1 || newScale > 4) return;
 
-            // Adjust translation to keep zoom centered on mouse
-            translateX = (mouseX - (mouseX - translateX) * delta / scale * newScale);
-            translateY = (mouseY - (mouseY - translateY) * delta / scale * newScale);
+            translateX = mouseX - (mouseX - translateX) * delta;
+            translateY = mouseY - (mouseY - translateY) * delta;
             scale = newScale;
 
-            updateTransform();
+            updateCanvasTransform();
         }, { passive: false });
 
-        // Handle drag to pan
+        // Pan functionality
         viewport.addEventListener('mousedown', (e) => {
-            isDragging = true;
-            startX = e.clientX - translateX;
-            startY = e.clientY - translateY;
-            canvas.classList.add('dragging');
+            if (!selectedShape) {
+                isDragging = true;
+                startX = e.clientX - translateX;
+                startY = e.clientY - translateY;
+            }
         });
 
         document.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
-            translateX = e.clientX - startX;
-            translateY = e.clientY - startY;
-            updateTransform();
+            if (isDragging) {
+                translateX = e.clientX - startX;
+                translateY = e.clientY - startY;
+                updateCanvasTransform();
+            }
         });
 
         document.addEventListener('mouseup', () => {
             isDragging = false;
-            canvas.classList.remove('dragging');
         });
 
-        function updateTransform() {
+        // Shape creation
+        document.querySelectorAll('.shape-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                selectedShape = btn.dataset.shape;
+            });
+        });
+
+        viewport.addEventListener('mousedown', startShapeCreation);
+        
+        function startShapeCreation(e) {
+            if (!selectedShape) return;
+            
+            isCreatingShape = true;
+            const rect = viewport.getBoundingClientRect();
+            const startX = (e.clientX - rect.left - translateX) / scale;
+            const startY = (e.clientY - rect.top - translateY) / scale;
+
+            currentShape = document.createElement('div');
+            currentShape.className = `shape ${selectedShape}`;
+            currentShape.style.left = startX + 'px';
+            currentShape.style.top = startY + 'px';
+            canvas.appendChild(currentShape);
+
+            document.addEventListener('mousemove', resizeShape);
+            document.addEventListener('mouseup', finalizeShape);
+        }
+
+        function resizeShape(e) {
+            if (!isCreatingShape) return;
+
+            const rect = viewport.getBoundingClientRect();
+            const currentX = (e.clientX - rect.left - translateX) / scale;
+            const currentY = (e.clientY - rect.top - translateY) / scale;
+            const startX = parseFloat(currentShape.style.left);
+            const startY = parseFloat(currentShape.style.top);
+
+            const width = currentX - startX;
+            const height = currentY - startY;
+
+            if (selectedShape === 'rect') {
+                currentShape.style.width = Math.abs(width) + 'px';
+                currentShape.style.height = Math.abs(height) + 'px';
+            } else if (selectedShape === 'circle') {
+                const diameter = Math.sqrt(width**2 + height**2);
+                currentShape.style.width = diameter + 'px';
+                currentShape.style.height = diameter + 'px';
+            }
+        }
+
+        function finalizeShape() {
+            isCreatingShape = false;
+            selectedShape = null;
+            document.removeEventListener('mousemove', resizeShape);
+            document.removeEventListener('mouseup', finalizeShape);
+
+            components.push({
+                type: currentShape.classList.contains('rect') ? 'Rectangle' : 'Circle',
+                width: parseFloat(currentShape.style.width),
+                height: parseFloat(currentShape.style.height)
+            });
+
+            updateComponentsList();
+        }
+
+        function updateComponentsList() {
+            const list = document.getElementById('components-list');
+            list.innerHTML = components.map((comp, index) => `
+                <div class="component-item">
+                    ${index + 1}. ${comp.type} (${Math.round(comp.width)}x${Math.round(comp.height)})
+                </div>
+            `).join('');
+        }
+
+        function updateCanvasTransform() {
             canvas.style.transform = `
                 translate(${translateX}px, ${translateY}px)
                 scale(${scale})
@@ -95,7 +221,7 @@
         // Initial position
         translateX = viewport.clientWidth / 2;
         translateY = viewport.clientHeight / 2;
-        updateTransform();
+        updateCanvasTransform();
     </script>
 </body>
 </html>
