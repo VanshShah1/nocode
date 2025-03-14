@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Zoomable Canvas</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        #viewport {
+            width: 100%;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #fff;
+            cursor: grab;
+        }
+
+        #canvas {
+            background-image: radial-gradient(circle at 1px 1px, #e0e0e0 1px, transparent 0);
+            background-size: 20px 20px;
+            background-position: 0 0;
+            width: 100%;
+            height: 100%;
+            transform-origin: 0 0;
+        }
+
+        #canvas.dragging {
+            cursor: grabbing;
+        }
+    </style>
+</head>
+<body>
+    <div id="viewport">
+        <div id="canvas"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const viewport = document.getElementById('viewport');
+        let scale = 1;
+        let isDragging = false;
+        let startX, startY, translateX = 0, translateY = 0;
+
+        // Handle mouse wheel zoom
+        viewport.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            const rect = viewport.getBoundingClientRect();
+            
+            // Get mouse position relative to viewport
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            // Calculate new scale and translation
+            const newScale = scale * delta;
+            if (newScale < 0.1 || newScale > 4) return;
+
+            // Adjust translation to keep zoom centered on mouse
+            translateX = (mouseX - (mouseX - translateX) * delta / scale * newScale);
+            translateY = (mouseY - (mouseY - translateY) * delta / scale * newScale);
+            scale = newScale;
+
+            updateTransform();
+        }, { passive: false });
+
+        // Handle drag to pan
+        viewport.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            startX = e.clientX - translateX;
+            startY = e.clientY - translateY;
+            canvas.classList.add('dragging');
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            translateX = e.clientX - startX;
+            translateY = e.clientY - startY;
+            updateTransform();
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+            canvas.classList.remove('dragging');
+        });
+
+        function updateTransform() {
+            canvas.style.transform = `
+                translate(${translateX}px, ${translateY}px)
+                scale(${scale})
+            `;
+        }
+
+        // Initial position
+        translateX = viewport.clientWidth / 2;
+        translateY = viewport.clientHeight / 2;
+        updateTransform();
+    </script>
+</body>
+</html>
